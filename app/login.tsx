@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabaseConfigurationMessage } from '@/lib/supabase';
 
 export default function LoginScreen() {
-  const { configured, requestEmailCode, verifyEmailCode } = useAuth();
+  const { configured, requestEmailCode, verifyEmailCode, signInWithMicrosoft } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -74,6 +74,12 @@ export default function LoginScreen() {
                   {busy ? 'Aguarde…' : codeSent ? 'Confirmar código e entrar' : 'Enviar código para meu Outlook'}
                 </PrimaryButton>
                 {codeSent && <Pressable accessibilityRole="button" disabled={busy || !emailValid} onPress={() => void sendCode()} style={({ pressed }) => [{ paddingVertical: 7, opacity: pressed ? 0.7 : 1 }]}><Text style={{ color: COLORS.red, fontSize: 12, fontWeight: '800', textAlign: 'center' }}>Enviar outro código</Text></Pressable>}
+                <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 14, gap: 10 }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 11, textAlign: 'center' }}>Ou use sua conta Microsoft corporativa para entrar e carregar a foto oficial do perfil.</Text>
+                  <PrimaryButton disabled={busy} onPress={() => void run(signInWithMicrosoft)} style={{ backgroundColor: COLORS.ink }}>
+                    {busy ? 'Aguarde…' : 'Entrar com Microsoft corporativa'}
+                  </PrimaryButton>
+                </View>
                 <Text style={{ color: COLORS.muted, fontSize: 11, lineHeight: 16, textAlign: 'center' }}>O código é enviado para o e-mail corporativo informado. A entrega depende da configuração de e-mail do Supabase.</Text>
               </>}
             </Card>
