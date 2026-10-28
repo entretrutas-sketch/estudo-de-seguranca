@@ -4,13 +4,14 @@ import * as ExpoLinking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { corporateEmailMessage, isCorporateEmail, normalizeCorporateEmail } from '@/lib/corporate-email';
 
 type AuthContextValue = {
   user: User | null;
   session: Session | null;
   loading: boolean;
   configured: boolean;
-  requestEmailCode: (email: string) => Promise<void>;
+  requestEmailCode: (email: string, fullName: string) => Promise<void>;
   verifyEmailCode: (email: string, code: string) => Promise<void>;
   signInWithMicrosoft: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -30,6 +31,11 @@ async function handleAuthUrl(url: string) {
     handledAuthCodes.delete(code);
     throw error;
   }
+  const { data } = await supabase.auth.getSession();
+  if (data.session && !isCorporateEmail(data.session.user.email ?? '')) {
+    await supabase.auth.signOut();
+    throw new Error(corporateEmailMessage);
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -41,15 +47,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!client) return;
 
     let mounted = true;
-    client.auth.getSession().then(({ data, error }) => {
+    client.auth.getSession().then(async ({ data, error }) => {
       if (error) console.warn('Não foi possível restaurar a sessão:', error.message);
       if (mounted) {
-        setSession(data.session);
+        if (data.session && !isCorporateEmail(data.session.user.email ?? '')) {
+          await client.auth.signOut();
+          setSession(null);
+        } else setSession(data.session);
         setLoading(false);
       }
     });
 
     const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
+      if (nextSession && !isCorporateEmail(nextSession.user.email ?? '')) {
+        setSession(null);
+        // Avoid calling Supabase auth methods inside its auth-state callback.
+        setTimeout(() => { void client.auth.signOut(); }, 0);
+        setLoading(false);
+        return;
+      }
       setSession(nextSession);
       setLoading(false);
     });
@@ -76,20 +92,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const requestEmailCode = async (email: string) => {
+  const requestEmailCode = async (email: string, fullName: string) => {
     if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true } });
+    const normalizedEmail = normalizeCorporateEmail(email);
+    if (!isCorporateEmail(normalizedEmail)) throw new Error(corporateEmailMessage);
+    if (!fullName.trim()) throw new Error('Informe seu nome completo.');
+    const { error } = await supabase.auth.signInWithOtp({ email: normalizedEmail, options: { shouldCreateUser: true, data: { name: fullName.trim() } } });
     if (error) throw error;
   };
 
   const verifyEmailCode = async (email: string, code: string) => {
     if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
-    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' });
+    const normalizedEmail = normalizeCorporateEmail(email);
+    if (!isCorporateEmail(normalizedEmail)) throw new Error(corporateEmailMessage);
+    const { data, error } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: code.trim(), type: 'email' });
     if (error) throw error;
+    if (data.user && !isCorporateEmail(data.user.email ?? '')) {
+      await supabase.auth.signOut();
+      throw new Error(corporateEmailMessage);
+    }
   };
 
   const signInWithMicrosoft = async () => {
     if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
+    const current = await supabase.auth.getSession();
+    if (current.data.session && !isCorporateEmail(current.data.session.user.email ?? '')) {
+      await supabase.auth.signOut();
+      throw new Error(corporateEmailMessage);
+    }
     const redirectTo = ExpoLinking.createURL('/auth/callback');
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'azure',
