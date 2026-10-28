@@ -1,12 +1,12 @@
-export const CORPORATE_EMAIL_DOMAIN = 'verisure.com.br';
+export const ALLOWED_EMAIL_DOMAINS = ['verisure.com.br', 'gmail.com'] as const;
 
 export function normalizeCorporateEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-export function isCorporateEmail(value: string) {
+export function isAllowedEmail(value: string) {
   const email = normalizeCorporateEmail(value);
-  return /^[^\s@]+@verisure\.com\.br$/.test(email);
+  return /^[^\s@]+@(?:verisure\.com\.br|gmail\.com)$/.test(email);
 }
 
-export const corporateEmailMessage = 'Use seu e-mail corporativo no formato nome@verisure.com.br.';
+export const allowedEmailMessage = 'Use uma conta @verisure.com.br ou @gmail.com para validar o aplicativo.';

@@ -5,7 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import { corporateEmailMessage, isCorporateEmail, normalizeCorporateEmail } from '@/lib/corporate-email';
+import { allowedEmailMessage, isAllowedEmail, normalizeCorporateEmail } from '@/lib/corporate-email';
 
 type AuthContextValue = {
   user: User | null;
@@ -37,9 +37,9 @@ async function handleAuthUrl(url: string) {
     throw error;
   }
   const { data } = await supabase.auth.getSession();
-  if (data.session && !isCorporateEmail(data.session.user.email ?? '')) {
+  if (data.session && !isAllowedEmail(data.session.user.email ?? '')) {
     await supabase.auth.signOut();
-    throw new Error(corporateEmailMessage);
+    throw new Error(allowedEmailMessage);
   }
 }
 
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted || !saved) return;
       try {
         const profile = JSON.parse(saved) as { name?: unknown; email?: unknown };
-        if (typeof profile.name === 'string' && profile.name.trim() && typeof profile.email === 'string' && isCorporateEmail(profile.email)) {
+        if (typeof profile.name === 'string' && profile.name.trim() && typeof profile.email === 'string' && isAllowedEmail(profile.email)) {
           setLocalProfile({ name: profile.name.trim(), email: normalizeCorporateEmail(profile.email) });
         }
       } catch { void AsyncStorage.removeItem(LOCAL_PROFILE_KEY); }
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.auth.getSession().then(async ({ data, error }) => {
       if (error) console.warn('Não foi possível restaurar a sessão:', error.message);
       if (mounted) {
-        if (data.session && !isCorporateEmail(data.session.user.email ?? '')) {
+        if (data.session && !isAllowedEmail(data.session.user.email ?? '')) {
           await client.auth.signOut();
           setSession(null);
         } else setSession(data.session);
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
-      if (nextSession && !isCorporateEmail(nextSession.user.email ?? '')) {
+      if (nextSession && !isAllowedEmail(nextSession.user.email ?? '')) {
         setSession(null);
         // Avoid calling Supabase auth methods inside its auth-state callback.
         setTimeout(() => { void client.auth.signOut(); }, 0);
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const requestEmailCode = async (email: string, fullName: string) => {
     if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
     const normalizedEmail = normalizeCorporateEmail(email);
-    if (!isCorporateEmail(normalizedEmail)) throw new Error(corporateEmailMessage);
+    if (!isAllowedEmail(normalizedEmail)) throw new Error(allowedEmailMessage);
     if (!fullName.trim()) throw new Error('Informe seu nome completo.');
     const { error } = await supabase.auth.signInWithOtp({ email: normalizedEmail, options: { shouldCreateUser: true, data: { name: fullName.trim() } } });
     if (error) throw error;
@@ -119,21 +119,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyEmailCode = async (email: string, code: string) => {
     if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
     const normalizedEmail = normalizeCorporateEmail(email);
-    if (!isCorporateEmail(normalizedEmail)) throw new Error(corporateEmailMessage);
+    if (!isAllowedEmail(normalizedEmail)) throw new Error(allowedEmailMessage);
     const { data, error } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: code.trim(), type: 'email' });
     if (error) throw error;
-    if (data.user && !isCorporateEmail(data.user.email ?? '')) {
+    if (data.user && !isAllowedEmail(data.user.email ?? '')) {
       await supabase.auth.signOut();
-      throw new Error(corporateEmailMessage);
+      throw new Error(allowedEmailMessage);
     }
   };
 
   const signInWithMicrosoft = async () => {
     if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
     const current = await supabase.auth.getSession();
-    if (current.data.session && !isCorporateEmail(current.data.session.user.email ?? '')) {
+    if (current.data.session && !isAllowedEmail(current.data.session.user.email ?? '')) {
       await supabase.auth.signOut();
-      throw new Error(corporateEmailMessage);
+      throw new Error(allowedEmailMessage);
     }
     const redirectTo = ExpoLinking.createURL('/auth/callback');
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInLocally = async (name: string, email: string) => {
     const normalizedEmail = normalizeCorporateEmail(email);
     if (!name.trim()) throw new Error('Informe seu nome completo.');
-    if (!isCorporateEmail(normalizedEmail)) throw new Error(corporateEmailMessage);
+    if (!isAllowedEmail(normalizedEmail)) throw new Error(allowedEmailMessage);
     const next = { name: name.trim(), email: normalizedEmail };
     await AsyncStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(next));
     setLocalProfile(next);
