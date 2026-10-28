@@ -59,17 +59,17 @@ function RootLayoutNav() {
 }
 
 function AuthenticatedRoutes() {
-  const { user, loading } = useAuth();
+  const { user, localProfile, loading } = useAuth();
 
   if (loading) return null;
 
   return (
     <Stack>
-      <Stack.Protected guard={Boolean(user)}>
+      <Stack.Protected guard={Boolean(user || localProfile)}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack.Protected>
-      <Stack.Protected guard={!user}>
+      <Stack.Protected guard={!user && !localProfile}>
           <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />

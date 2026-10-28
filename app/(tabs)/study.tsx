@@ -152,7 +152,7 @@ export default function StudyScreen() {
     if (!client.name.trim()) { Alert.alert('Dados incompletos', 'Informe o nome do cliente.'); setStep(2); return; }
     if (!specialist.name.trim() || !specialist.email.trim()) { Alert.alert('Dados incompletos', 'Informe o nome e o e-mail do especialista.'); setStep(1); return; }
     if (invalidDiscount) { Alert.alert('Limite comercial', 'Para condições acima do limite comercial, fale com o gerente da região.'); return; }
-    if (!supabase) { Alert.alert('Backend não configurado', Platform.OS === 'web' ? 'Este estudo permanece apenas nesta sessão de navegador; nenhum dado foi sincronizado.' : 'O rascunho está no armazenamento seguro do dispositivo. Nenhum preço foi validado nem estudo sincronizado.'); return; }
+    if (!user || !supabase) { Alert.alert('Acesso local temporário', 'O rascunho pode ser preparado neste dispositivo, mas salvar o estudo, validar os valores no backend e gerar uma proposta comercial exige autenticação corporativa ativa. Nenhum valor foi simulado.'); return; }
     setSaving(true);
     let savedStudy: SavedStudy | null = null;
     try {
