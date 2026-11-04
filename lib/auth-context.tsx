@@ -13,6 +13,13 @@ type AuthContextValue = {
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function readableConnectionError(error: unknown) {
+  if (error instanceof TypeError && /fetch|network|load failed/i.test(error.message)) {
+    return new Error('Não foi possível conectar ao Supabase. Verifique se o projeto está ativo e se a URL configurada no GitHub Actions está correta.');
+  }
+  return error;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [accessStatus, setAccessStatus] = useState<AccessStatus>('loading');
@@ -55,14 +62,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!/^[A-Z0-9.-]{3,30}$/.test(cleanNumber)) throw new Error('Confira sua matrícula.');
     if (!/^[^\s@]+@verisure\.com\.br$/.test(cleanEmail)) throw new Error('Use seu e-mail corporativo @verisure.com.br.');
     if (password.length < 10) throw new Error('Crie uma senha com pelo menos 10 caracteres.');
-    const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: cleanName, employee_number: cleanNumber } } });
-    if (error) throw error;
-    if (data.session) await supabase.auth.signOut();
+    try {
+      const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: cleanName, employee_number: cleanNumber } } });
+      if (error) throw error;
+      if (data.session) await supabase.auth.signOut();
+    } catch (error) { throw readableConnectionError(error); }
   };
 
   const signInWithEmployee = async (employeeNumber: string, password: string) => {
     if (!supabase) throw new Error('Backend indisponível. Configure o Supabase para entrar.');
-    const { data, error } = await supabase.functions.invoke('employee-login', { body: { employeeNumber: employeeNumber.trim().toUpperCase(), password } });
+    const response = await supabase.functions.invoke('employee-login', { body: { employeeNumber: employeeNumber.trim().toUpperCase(), password } })
+      .catch((connectionError: unknown) => { throw readableConnectionError(connectionError); });
+    const { data, error } = response;
     if (error) throw new Error('Não foi possível validar o acesso. Verifique a conexão e tente novamente.');
     const state = data?.state;
     if (state === 'pending' || state === 'rejected' || state === 'invalid') return state;
