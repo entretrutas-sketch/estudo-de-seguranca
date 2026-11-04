@@ -1,220 +1,80 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AppState, Linking, Platform } from 'react-native';
-import * as ExpoLinking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Platform } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import { allowedEmailMessage, isAllowedEmail, normalizeCorporateEmail } from '@/lib/corporate-email';
 
+type AccessStatus = 'pending' | 'approved' | 'rejected' | 'loading';
 type AuthContextValue = {
-  user: User | null;
-  localProfile: { name: string; email: string } | null;
-  session: Session | null;
-  loading: boolean;
-  configured: boolean;
-  requestEmailCode: (email: string, fullName: string) => Promise<void>;
-  verifyEmailCode: (email: string, code: string) => Promise<void>;
-  signInWithMicrosoft: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInLocally: (name: string, email: string) => Promise<void>;
+  user: User | null; session: Session | null; loading: boolean; configured: boolean;
+  accessStatus: AccessStatus; isMaster: boolean;
+  register: (name: string, employeeNumber: string, email: string, password: string) => Promise<void>;
+  signInWithEmployee: (employeeNumber: string, password: string) => Promise<'pending' | 'rejected' | 'invalid' | 'signed-in'>;
   signOut: () => Promise<void>;
 };
-
 const AuthContext = createContext<AuthContextValue | null>(null);
-const handledAuthCodes = new Set<string>();
-const LOCAL_PROFILE_KEY = 'estudo-seguranca:local-profile:v1';
-
-async function handleAuthUrl(url: string) {
-  if (!supabase) return;
-  const parsed = ExpoLinking.parse(url);
-  const code = parsed.queryParams?.code;
-  if (typeof code !== 'string' || handledAuthCodes.has(code)) return;
-  handledAuthCodes.add(code);
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) {
-    handledAuthCodes.delete(code);
-    throw error;
-  }
-  const { data } = await supabase.auth.getSession();
-  if (data.session && !isAllowedEmail(data.session.user.email ?? '')) {
-    await supabase.auth.signOut();
-    throw new Error(allowedEmailMessage);
-  }
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [localProfile, setLocalProfile] = useState<{ name: string; email: string } | null>(null);
+  const [accessStatus, setAccessStatus] = useState<AccessStatus>('loading');
   const [loading, setLoading] = useState(isSupabaseConfigured);
+  const isMaster = ['master_admin', 'admin'].includes(String(session?.user.app_metadata?.role ?? ''));
 
   useEffect(() => {
-    let mounted = true;
-    void AsyncStorage.getItem(LOCAL_PROFILE_KEY).then((saved) => {
-      if (!mounted || !saved) return;
-      try {
-        const profile = JSON.parse(saved) as { name?: unknown; email?: unknown };
-        if (typeof profile.name === 'string' && profile.name.trim() && typeof profile.email === 'string' && isAllowedEmail(profile.email)) {
-          setLocalProfile({ name: profile.name.trim(), email: normalizeCorporateEmail(profile.email) });
-        }
-      } catch { void AsyncStorage.removeItem(LOCAL_PROFILE_KEY); }
-    }).catch(() => undefined).finally(() => { if (mounted && !isSupabaseConfigured) setLoading(false); });
+    let active = true;
     const client = supabase;
-    if (!client) return () => { mounted = false; };
-
-    client.auth.getSession().then(async ({ data, error }) => {
-      if (error) console.warn('Não foi possível restaurar a sessão:', error.message);
-      if (mounted) {
-        if (data.session && !isAllowedEmail(data.session.user.email ?? '')) {
-          await client.auth.signOut();
-          setSession(null);
-        } else setSession(data.session);
-        setLoading(false);
-      }
-    });
-
-    const { data: authListener } = client.auth.onAuthStateChange((_event, nextSession) => {
-      if (nextSession && !isAllowedEmail(nextSession.user.email ?? '')) {
-        setSession(null);
-        // Avoid calling Supabase auth methods inside its auth-state callback.
-        setTimeout(() => { void client.auth.signOut(); }, 0);
-        setLoading(false);
+    if (!client) { setLoading(false); setAccessStatus('pending'); return; }
+    const loadStatus = async (next: Session | null) => {
+      if (!next) { if (active) { setAccessStatus('pending'); setSession(null); setLoading(false); } return; }
+      setSession(next);
+      const role = String(next.user.app_metadata?.role ?? '');
+      if (['master_admin', 'admin', 'commercial_admin'].includes(role)) {
+        if (active) { setAccessStatus('approved'); setLoading(false); }
         return;
       }
-      setSession(nextSession);
+      const { data, error } = await client.from('profiles').select('access_status').eq('id', next.user.id).maybeSingle();
+      if (!active) return;
+      const status = error ? 'pending' : (data?.access_status ?? 'pending');
+      if (status !== 'approved') {
+        setSession(null); setAccessStatus(status === 'rejected' ? 'rejected' : 'pending');
+        await client.auth.signOut();
+      } else setAccessStatus('approved');
       setLoading(false);
-    });
-
-    const linkListener = Platform.OS === 'web' ? undefined : Linking.addEventListener('url', ({ url }) => {
-      void handleAuthUrl(url).catch((error: unknown) => console.warn('Falha ao concluir o login:', error));
-    });
-    if (Platform.OS !== 'web') {
-      void Linking.getInitialURL().then((url) => {
-        if (url) return handleAuthUrl(url);
-      }).catch((error: unknown) => console.warn('Falha ao processar o retorno do login:', error));
-    }
-    const appStateListener = Platform.OS === 'web' ? undefined : AppState.addEventListener('change', (state) => {
-      if (state === 'active') void client.auth.startAutoRefresh();
-      else client.auth.stopAutoRefresh();
-    });
-    if (Platform.OS !== 'web' && AppState.currentState === 'active') void client.auth.startAutoRefresh();
-
-    return () => {
-      mounted = false;
-      authListener.subscription.unsubscribe();
-      linkListener?.remove();
-      appStateListener?.remove();
     };
+    void client.auth.getSession().then(({ data }) => loadStatus(data.session));
+    const { data: listener } = client.auth.onAuthStateChange((_event, next) => { void loadStatus(next); });
+    const appStateListener = Platform.OS === 'web' ? undefined : AppState.addEventListener('change', (state) => {
+      if (state === 'active') void client.auth.startAutoRefresh(); else client.auth.stopAutoRefresh();
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); appStateListener?.remove(); };
   }, []);
 
-  const requestEmailCode = async (email: string, fullName: string) => {
-    if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
-    const normalizedEmail = normalizeCorporateEmail(email);
-    if (!isAllowedEmail(normalizedEmail)) throw new Error(allowedEmailMessage);
-    if (!fullName.trim()) throw new Error('Informe seu nome completo.');
-    const { error } = await supabase.auth.signInWithOtp({ email: normalizedEmail, options: { shouldCreateUser: true, data: { name: fullName.trim() } } });
+  const register = async (name: string, employeeNumber: string, email: string, password: string) => {
+    if (!supabase) throw new Error('Backend indisponível. Configure o Supabase para solicitar acesso.');
+    const cleanName = name.trim(); const cleanNumber = employeeNumber.trim().toUpperCase(); const cleanEmail = email.trim().toLowerCase();
+    if (cleanName.length < 3) throw new Error('Informe seu nome completo.');
+    if (!/^[A-Z0-9.-]{3,30}$/.test(cleanNumber)) throw new Error('Confira sua matrícula.');
+    if (!/^[^\s@]+@verisure\.com\.br$/.test(cleanEmail)) throw new Error('Use seu e-mail corporativo @verisure.com.br.');
+    if (password.length < 10) throw new Error('Crie uma senha com pelo menos 10 caracteres.');
+    const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: cleanName, employee_number: cleanNumber } } });
     if (error) throw error;
+    if (data.session) await supabase.auth.signOut();
   };
 
-  const verifyEmailCode = async (email: string, code: string) => {
-    if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
-    const normalizedEmail = normalizeCorporateEmail(email);
-    if (!isAllowedEmail(normalizedEmail)) throw new Error(allowedEmailMessage);
-    const { data, error } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: code.trim(), type: 'email' });
-    if (error) throw error;
-    if (data.user && !isAllowedEmail(data.user.email ?? '')) {
-      await supabase.auth.signOut();
-      throw new Error(allowedEmailMessage);
-    }
+  const signInWithEmployee = async (employeeNumber: string, password: string) => {
+    if (!supabase) throw new Error('Backend indisponível. Configure o Supabase para entrar.');
+    const { data, error } = await supabase.functions.invoke('employee-login', { body: { employeeNumber: employeeNumber.trim().toUpperCase(), password } });
+    if (error) throw new Error('Não foi possível validar o acesso. Verifique a conexão e tente novamente.');
+    const state = data?.state;
+    if (state === 'pending' || state === 'rejected' || state === 'invalid') return state;
+    if (!data?.access_token || !data?.refresh_token) throw new Error('Resposta de autenticação inválida.');
+    const { error: sessionError } = await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
+    if (sessionError) throw sessionError;
+    return 'signed-in';
   };
 
-  const signInWithMicrosoft = async () => {
-    if (!supabase) throw new Error('Configure as credenciais do Supabase para entrar.');
-    const current = await supabase.auth.getSession();
-    if (current.data.session && !isAllowedEmail(current.data.session.user.email ?? '')) {
-      await supabase.auth.signOut();
-      throw new Error(allowedEmailMessage);
-    }
-    const redirectTo = ExpoLinking.createURL('/auth/callback');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'azure',
-      options: { redirectTo, scopes: 'email openid profile User.Read', skipBrowserRedirect: Platform.OS !== 'web' },
-    });
-    if (error) throw error;
-    if (!data.url) throw new Error('A Microsoft não retornou o endereço de autenticação.');
-    if (Platform.OS === 'web') return;
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type === 'success' && result.url) await handleAuthUrl(result.url);
-  };
-
-  const signInWithGoogle = async () => {
-    if (!supabase) throw new Error('O login Google exige a conexão com o Supabase. Use o acesso local temporário enquanto ela não estiver configurada.');
-    // Check the public Auth settings first so a disabled provider does not
-    // navigate the user away from the app to Supabase's raw 400 error page.
-    let googleEnabled: boolean | undefined;
-    try {
-      const settingsResponse = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/settings`, {
-        headers: { apikey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '' },
-      });
-      if (settingsResponse.ok) {
-        const settings = await settingsResponse.json() as { external?: { google?: boolean } };
-        googleEnabled = settings.external?.google;
-      }
-    } catch {
-      // A temporary settings endpoint/network failure should not block OAuth.
-    }
-    if (googleEnabled === false) {
-      throw new Error('O login Google está desativado neste projeto. Habilite Google em Supabase → Authentication → Sign In / Providers e configure o Client ID e o Client Secret do OAuth.');
-    }
-    const redirectTo = ExpoLinking.createURL('/auth/callback');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo, scopes: 'openid email profile', skipBrowserRedirect: Platform.OS !== 'web' },
-    });
-    if (error) throw new Error('Não foi possível iniciar o Google. Confirme se o provedor Google está habilitado no Supabase.');
-    if (!data.url) throw new Error('O Google não retornou o endereço de autenticação.');
-    if (Platform.OS === 'web') return;
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type === 'success' && result.url) await handleAuthUrl(result.url);
-  };
-
-  const signInLocally = async (name: string, email: string) => {
-    const normalizedEmail = normalizeCorporateEmail(email);
-    if (!name.trim()) throw new Error('Informe seu nome completo.');
-    if (!isAllowedEmail(normalizedEmail)) throw new Error(allowedEmailMessage);
-    const next = { name: name.trim(), email: normalizedEmail };
-    await AsyncStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(next));
-    setLocalProfile(next);
-  };
-
-  const signOut = async () => {
-    await AsyncStorage.removeItem(LOCAL_PROFILE_KEY);
-    setLocalProfile(null);
-    if (supabase) {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    }
-  };
-
-  const value = useMemo(() => ({
-    user: session?.user ?? null,
-    localProfile,
-    session,
-    loading,
-    configured: isSupabaseConfigured,
-    requestEmailCode,
-    verifyEmailCode,
-    signInWithMicrosoft,
-    signInWithGoogle,
-    signInLocally,
-    signOut,
-  }), [session, localProfile, loading]);
-
+  const signOut = async () => { if (supabase) await supabase.auth.signOut(); setSession(null); setAccessStatus('pending'); };
+  const value = useMemo(() => ({ user: session?.user ?? null, session, loading, configured: isSupabaseConfigured, accessStatus, isMaster, register, signInWithEmployee, signOut }), [session, loading, accessStatus, isMaster]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
-  const value = useContext(AuthContext);
-  if (!value) throw new Error('useAuth must be used inside AuthProvider');
-  return value;
-}
+export function useAuth() { const value = useContext(AuthContext); if (!value) throw new Error('useAuth must be used inside AuthProvider'); return value; }

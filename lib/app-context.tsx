@@ -58,6 +58,7 @@ export type ChatMessage = { id: string; author: string; body: string; time: stri
 
 type AppContextValue = {
   profile: { name: string; email: string; avatarUrl: string };
+  updateProfileAvatarUrl: (url: string) => void;
   studies: SavedStudy[];
   studiesStatus: 'loading' | 'ready' | 'offline';
   addStudy: (study: Omit<SavedStudy, 'id' | 'createdAt'>) => Promise<SavedStudy>;
@@ -82,7 +83,7 @@ function formatMessage(row: { id: string; author_name: string; author_avatar_url
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { user, session, localProfile } = useAuth();
+  const { user, session } = useAuth();
   const [studies, setStudies] = useState<SavedStudy[]>([]);
   const [studiesStatus, setStudiesStatus] = useState<'loading' | 'ready' | 'offline'>('loading');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -251,7 +252,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...studies.filter((existing) => existing.id !== item.id)];
     setStudies(next);
     return item;
-  }, [user, localProfile, studies]);
+  }, [user, studies]);
 
   const sendChat = useCallback(async (body: string) => {
     if (!user) throw new Error('Entre na sua conta para enviar mensagens.');
@@ -279,10 +280,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     profile: {
-      name: String(user?.user_metadata?.name ?? user?.user_metadata?.user_name ?? user?.email?.split('@')[0] ?? localProfile?.name ?? 'Especialista'),
-      email: user?.email ?? localProfile?.email ?? '',
+      name: String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.user_metadata?.user_name ?? user?.email?.split('@')[0] ?? 'Especialista'),
+      email: user?.email ?? '',
       avatarUrl: profileAvatarUrl || String(user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? ''),
     },
+    updateProfileAvatarUrl: setProfileAvatarUrl,
     studies,
     studiesStatus,
     addStudy,
@@ -292,7 +294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     unreadCount,
     markChatRead,
     sendChat,
-  }), [studies, studiesStatus, chatMessages, chatConnected, chatAuthorized, unreadCount, user, localProfile, profileAvatarUrl, addStudy, sendChat, markChatRead]);
+  }), [studies, studiesStatus, chatMessages, chatConnected, chatAuthorized, unreadCount, user, profileAvatarUrl, addStudy, sendChat, markChatRead]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

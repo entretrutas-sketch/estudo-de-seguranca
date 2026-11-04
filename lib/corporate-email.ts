@@ -1,4 +1,4 @@
-export const ALLOWED_EMAIL_DOMAINS = ['gmail.com'] as const;
+export const ALLOWED_EMAIL_DOMAINS = ['verisure.com.br'] as const;
 
 export function normalizeCorporateEmail(value: string) {
   return value.trim().toLowerCase();
@@ -6,7 +6,7 @@ export function normalizeCorporateEmail(value: string) {
 
 export function isAllowedEmail(value: string) {
   const email = normalizeCorporateEmail(value);
-  return /^[^\s@]+@gmail\.com$/.test(email);
+  return /^[^\s@]+@verisure\.com\.br$/.test(email);
 }
 
-export const allowedEmailMessage = 'Entre com uma conta Google pessoal terminada em @gmail.com.';
+export const allowedEmailMessage = 'Use seu e-mail corporativo terminado em @verisure.com.br.';

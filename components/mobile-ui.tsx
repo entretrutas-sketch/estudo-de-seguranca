@@ -3,6 +3,7 @@ import { Image, Modal, Pressable, StyleSheet, Text, View, type ImageStyle, type 
 import { router, usePathname } from 'expo-router';
 import { useState } from 'react';
 import { COLORS } from '@/lib/app-context';
+import { useAuth } from '@/lib/auth-context';
 
 export function Screen({ children, ...props }: ViewProps) {
   return <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}><View {...props} style={[styles.screen, props.style]}>{children}</View></SafeAreaView>;
@@ -17,13 +18,15 @@ const destinations = [
 export function Header({ eyebrow = 'ÁREA COMERCIAL', title, right }: { eyebrow?: string; title: string; right?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { isMaster } = useAuth();
+  const menuDestinations = isMaster ? [...destinations, ['Autorizar acessos', '/access-requests'] as const] : destinations;
   return <View style={styles.header}>
     <Pressable accessibilityRole="button" accessibilityLabel="Abrir menu de navegação" onPress={() => setOpen(true)} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}><View style={styles.menuGlyph}><View style={styles.menuGlyphLine}/><View style={styles.menuGlyphLine}/><View style={styles.menuGlyphLine}/></View></Pressable>
     <View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.eyebrow}>{eyebrow}</Text><Text style={styles.headerTitle}>{title}</Text></View>{right}
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.drawerBackdrop}><Pressable accessibilityLabel="Fechar menu" onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} /><View style={styles.drawer}>
         <BrandMark /><Text style={[styles.eyebrow, { marginTop: 26, marginBottom: 8 }]}>NAVEGAÇÃO</Text>
-        {destinations.map(([label, path]) => <Pressable key={path} accessibilityRole="button" accessibilityState={{ selected: pathname === path || pathname === `/(tabs)${path}` }} onPress={() => { setOpen(false); router.push(path as never); }} style={({ pressed }) => [styles.drawerLink, (pathname === path || pathname === `/(tabs)${path}`) && styles.drawerLinkActive, pressed && styles.pressed]}><Text style={{ color: COLORS.ink, fontSize: 14, fontWeight: '700' }}>{label}</Text><Text style={{ color: COLORS.red, fontSize: 20 }}>›</Text></Pressable>)}
+        {menuDestinations.map(([label, path]) => <Pressable key={path} accessibilityRole="button" accessibilityState={{ selected: pathname === path || pathname === `/(tabs)${path}` }} onPress={() => { setOpen(false); router.push(path as never); }} style={({ pressed }) => [styles.drawerLink, (pathname === path || pathname === `/(tabs)${path}`) && styles.drawerLinkActive, pressed && styles.pressed]}><Text style={{ color: COLORS.ink, fontSize: 14, fontWeight: '700' }}>{label}</Text><Text style={{ color: COLORS.red, fontSize: 20 }}>›</Text></Pressable>)}
       </View></View>
     </Modal>
   </View>;
