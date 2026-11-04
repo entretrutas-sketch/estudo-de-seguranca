@@ -8,11 +8,12 @@ import { supabase } from '@/lib/supabase';
 const kitImage = require('../../assets/equipment/00-kit-verisure.webp');
 
 const shortcuts = [
-  { title: 'Novo estudo', description: 'Avalie o imóvel e registre os acessos.', route: '/study', icon: '＋' },
-  { title: 'Meus estudos', description: 'Consulte rascunhos e propostas salvas.', route: '/studies', icon: '▤' },
+  { title: 'Novo estudo', description: 'Avalie o imóvel e registre os acessos.', route: '/study', icon: '+' },
+  { title: 'Meus estudos', description: 'Consulte rascunhos e propostas salvas.', route: '/studies', icon: 'ES' },
   { title: 'Criar proposta', description: 'Monte uma proposta com itens e valores livres.', route: '/create-proposal', icon: 'R$' },
-  { title: 'Catálogo', description: 'Veja kits e equipamentos disponíveis.', route: '/catalog', icon: '⌂' },
-  { title: 'Equipe', description: 'Converse com gestão e especialistas.', route: '/chat', icon: '◌' },
+  { title: 'Catálogo', description: 'Veja kits e equipamentos disponíveis.', route: '/catalog', icon: 'CT' },
+  { title: 'Equipe', description: 'Converse com gestão e especialistas.', route: '/chat', icon: 'EQ' },
+  { title: 'Propostas', description: 'Acompanhe propostas já preparadas.', route: '/proposals', icon: 'PR' },
 ] as const;
 
 export default function DashboardScreen() {
@@ -23,8 +24,8 @@ export default function DashboardScreen() {
   return (
     <Screen>
       <Header eyebrow="VISÃO GERAL" title="Painel" right={<Pressable accessibilityRole="button" accessibilityLabel="Abrir perfil" onPress={() => router.push('/profile')}><Avatar name={profile.name} uri={profile.avatarUrl} size={40} /></Pressable>} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        <View style={{ marginTop: 8, marginBottom: 20 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+        <View style={{ marginTop: 4, marginBottom: 18 }}>
           <Text style={{ color: '#70747C', fontSize: 13 }}>Bem-vindo(a),</Text>
           <Text numberOfLines={1} style={{ color: '#17191D', fontSize: 24, fontWeight: '800', letterSpacing: -0.5, marginTop: 3 }}>{profile.name || 'Especialista'}</Text>
         </View>
@@ -37,7 +38,7 @@ export default function DashboardScreen() {
             </View>
           </View>
           <View style={{ padding: 19 }}>
-            <Text style={{ color: '#17191D', fontSize: 21, lineHeight: 27, fontWeight: '800', letterSpacing: -0.4 }}>Transforme a avaliação em uma proposta clara.</Text>
+            <Text style={{ color: COLORS.ink, fontSize: 21, lineHeight: 27, fontWeight: '800', letterSpacing: -0.4 }}>Transforme a avaliação em uma proposta clara.</Text>
             <Text style={{ color: '#70747C', fontSize: 13, lineHeight: 20, marginTop: 7 }}>Registre o imóvel, avalie os acessos e apresente uma solução personalizada.</Text>
             <PrimaryButton onPress={() => router.push('/study')} style={{ marginTop: 16, alignSelf: 'flex-start' }}>Começar novo estudo</PrimaryButton>
           </View>
@@ -48,7 +49,7 @@ export default function DashboardScreen() {
           <Card style={{ marginTop: 10, paddingVertical: 16, flexDirection: 'row' }}>
             <Metric value={String(studies.length).padStart(2, '0')} label={studiesStatus === 'offline' ? 'estudos neste aparelho' : 'estudos salvos'} />
             <Metric value={discountLimits ? `${discountLimits.equipment}%` : '—'} label="limite em equipamentos" />
-            <View style={{ flex: 1, paddingHorizontal: 12 }}><Text style={{ color: '#17191D', fontSize: 22, fontWeight: '800' }}>{discountLimits ? `${discountLimits.monthly}%` : '—'}</Text><Text style={{ color: '#737780', fontSize: 10, marginTop: 4 }}>limite mensal</Text></View>
+            <View style={{ flex: 1, paddingHorizontal: 12 }}><Text style={{ color: COLORS.ink, fontSize: 22, fontWeight: '800' }}>{discountLimits ? `${discountLimits.monthly}%` : '—'}</Text><Text style={{ color: COLORS.muted, fontSize: 11, lineHeight: 15, marginTop: 4 }}>limite mensal</Text></View>
           </Card>
         </View>
 
@@ -64,10 +65,10 @@ export default function DashboardScreen() {
           contentContainerStyle={{ gap: 10 }}
           renderItem={({ item }) => (
             <Pressable accessibilityRole="button" onPress={() => router.push(item.route)} style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.78 }]}>
-              <Card style={{ height: 126, padding: 14 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: '#FFF0F3', alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: COLORS.red, fontSize: 20, fontWeight: '700' }}>{item.icon}</Text></View>
+              <Card style={{ minHeight: 132, padding: 14 }}>
+                <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: COLORS.redSoft, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: COLORS.redDark, fontSize: item.icon.length > 1 ? 11 : 21, fontWeight: '800' }}>{item.icon}</Text></View>
                 <Text style={{ color: '#17191D', fontSize: 14, fontWeight: '800', marginTop: 10 }}>{item.title}</Text>
-                <Text style={{ color: '#737780', fontSize: 11, lineHeight: 15, marginTop: 3 }}>{item.description}</Text>
+                <Text style={{ color: COLORS.muted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>{item.description}</Text>
               </Card>
             </Pressable>
           )}

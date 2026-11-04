@@ -149,6 +149,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     if (!supabase) throw new Error('O login Google exige a conexão com o Supabase. Use o acesso local temporário enquanto ela não estiver configurada.');
+    // Check the public Auth settings first so a disabled provider does not
+    // navigate the user away from the app to Supabase's raw 400 error page.
+    let googleEnabled: boolean | undefined;
+    try {
+      const settingsResponse = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/settings`, {
+        headers: { apikey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '' },
+      });
+      if (settingsResponse.ok) {
+        const settings = await settingsResponse.json() as { external?: { google?: boolean } };
+        googleEnabled = settings.external?.google;
+      }
+    } catch {
+      // A temporary settings endpoint/network failure should not block OAuth.
+    }
+    if (googleEnabled === false) {
+      throw new Error('O login Google está desativado neste projeto. Habilite Google em Supabase → Authentication → Sign In / Providers e configure o Client ID e o Client Secret do OAuth.');
+    }
     const redirectTo = ExpoLinking.createURL('/auth/callback');
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',

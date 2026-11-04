@@ -18,7 +18,7 @@ export function Header({ eyebrow = 'ÁREA COMERCIAL', title, right }: { eyebrow?
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   return <View style={styles.header}>
-    <Pressable accessibilityRole="button" accessibilityLabel="Abrir menu de navegação" onPress={() => setOpen(true)} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}><Text style={{ color: COLORS.red, fontSize: 21, fontWeight: '900' }}>☰</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel="Abrir menu de navegação" onPress={() => setOpen(true)} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}><View style={styles.menuGlyph}><View style={styles.menuGlyphLine}/><View style={styles.menuGlyphLine}/><View style={styles.menuGlyphLine}/></View></Pressable>
     <View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.eyebrow}>{eyebrow}</Text><Text style={styles.headerTitle}>{title}</Text></View>{right}
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.drawerBackdrop}><Pressable accessibilityLabel="Fechar menu" onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} /><View style={styles.drawer}>
@@ -75,28 +75,30 @@ export function Progress({ step, total }: { step: number; total: number }) {
 }
 
 export const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F6F8' },
-  screen: { flex: 1, backgroundColor: '#F5F6F8' },
-  header: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  safe: { flex: 1, backgroundColor: COLORS.canvas },
+  screen: { flex: 1, backgroundColor: COLORS.canvas },
+  header: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   menuButton: { width: 42, height: 42, borderRadius: 13, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: '#E7E9ED', alignItems: 'center', justifyContent: 'center' },
+  menuGlyph: { width: 18, gap: 4 },
+  menuGlyphLine: { height: 2, borderRadius: 2, backgroundColor: COLORS.red },
   drawerBackdrop: { flex: 1, backgroundColor: '#0008', flexDirection: 'row' },
   drawer: { width: '84%', maxWidth: 350, backgroundColor: COLORS.surface, paddingTop: 56, paddingHorizontal: 20, paddingBottom: 24, borderTopRightRadius: 24, borderBottomRightRadius: 24 },
   drawerLink: { minHeight: 48, borderBottomWidth: 1, borderBottomColor: '#F0F1F3', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderRadius: 10 },
   drawerLinkActive: { backgroundColor: '#FFF0F3' },
-  eyebrow: { color: COLORS.red, fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
-  headerTitle: { color: '#17191D', fontSize: 24, fontWeight: '800', letterSpacing: -0.5, marginTop: 4 },
+  eyebrow: { color: COLORS.redDark, fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
+  headerTitle: { color: COLORS.ink, fontSize: 23, fontWeight: '800', letterSpacing: -0.45, marginTop: 3 },
   brandFallback: { minWidth: 128, minHeight: 58, justifyContent: 'center' },
   brandFallbackText: { color: COLORS.red, fontSize: 20, fontWeight: '900' },
-  card: { backgroundColor: COLORS.surface, borderRadius: 17, borderWidth: 1, borderColor: '#E9EBEF', padding: 18, shadowColor: '#121821', shadowOpacity: 0.035, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
-  sectionLabel: { color: '#70747C', fontSize: 10, fontWeight: '800', letterSpacing: 1.05, textTransform: 'uppercase' },
-  primaryButton: { backgroundColor: COLORS.red, minHeight: 50, paddingHorizontal: 19, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  card: { backgroundColor: COLORS.surface, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, padding: 18, shadowColor: '#121821', shadowOpacity: 0.035, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
+  sectionLabel: { color: COLORS.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.9, textTransform: 'uppercase' },
+  primaryButton: { backgroundColor: COLORS.red, minHeight: 50, paddingHorizontal: 19, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   primaryButtonText: { color: COLORS.surface, fontSize: 14, fontWeight: '800' },
-  secondaryButton: { backgroundColor: COLORS.surface, minHeight: 48, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#DFE2E7', alignItems: 'center', justifyContent: 'center' },
+  secondaryButton: { backgroundColor: COLORS.surface, minHeight: 48, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   secondaryButtonText: { color: COLORS.redDark, fontSize: 13, fontWeight: '900' },
   pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
   metric: { flex: 1, borderRightWidth: 1, borderRightColor: '#E9EBEF', paddingHorizontal: 12 },
-  metricValue: { color: '#17191D', fontSize: 22, fontWeight: '800' },
-  metricLabel: { color: '#737780', fontSize: 10, marginTop: 4 },
+  metricValue: { color: COLORS.ink, fontSize: 22, fontWeight: '800' },
+  metricLabel: { color: COLORS.muted, fontSize: 11, lineHeight: 15, marginTop: 4 },
   progressTrack: { height: 5, backgroundColor: '#F1E6E9', borderRadius: 8, overflow: 'hidden', marginTop: 12 },
   progressFill: { height: 5, backgroundColor: COLORS.red, borderRadius: 8 },
 });
