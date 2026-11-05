@@ -22,7 +22,8 @@ export function Header({ eyebrow = 'ÁREA COMERCIAL', title, right }: { eyebrow?
   const menuDestinations = isMaster ? [...destinations, ['Autorizar acessos', '/access-requests'] as const] : destinations;
   return <View style={styles.header}>
     <Pressable accessibilityRole="button" accessibilityLabel="Abrir menu de navegação" onPress={() => setOpen(true)} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}><View style={styles.menuGlyph}><View style={styles.menuGlyphLine}/><View style={styles.menuGlyphLine}/><View style={styles.menuGlyphLine}/></View></Pressable>
-    <View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.eyebrow}>{eyebrow}</Text><Text style={styles.headerTitle}>{title}</Text></View>{right}
+    <View style={styles.headerDivider} />
+    <View style={{ flex: 1, marginLeft: 13 }}><Text style={styles.eyebrow}>- {eyebrow}</Text><Text style={styles.headerTitle}>{title}</Text></View>{right}
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.drawerBackdrop}><Pressable accessibilityLabel="Fechar menu" onPress={() => setOpen(false)} style={StyleSheet.absoluteFill} /><View style={styles.drawer}>
         <BrandMark /><Text style={[styles.eyebrow, { marginTop: 26, marginBottom: 8 }]}>NAVEGAÇÃO</Text>
@@ -82,6 +83,7 @@ export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.canvas },
   header: { paddingHorizontal: 20, paddingTop: 9, paddingBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   menuButton: { width: 46, height: 46, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#182236', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
+  headerDivider: { width: 1, height: 48, backgroundColor: '#A8AFBD', marginLeft: 10 },
   menuGlyph: { width: 19, gap: 4 },
   menuGlyphLine: { height: 2.5, borderRadius: 2, backgroundColor: COLORS.red },
   drawerBackdrop: { flex: 1, backgroundColor: '#0008', flexDirection: 'row' },
