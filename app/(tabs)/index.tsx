@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
 import { Avatar, Card, Header, ProductImage, Screen } from '@/components/mobile-ui';
 import { COLORS, useApp } from '@/lib/app-context';
 import { supabase } from '@/lib/supabase';
@@ -12,9 +12,18 @@ const quickLinks = [
   { title: 'Meus estudos', description: 'Acesse seus estudos realizados', route: '/studies', ios: 'folder.fill', other: 'folder' },
 ] as const;
 
+const campaigns: { key: string; title: string; image: ImageSourcePropType }[] = [
+  { key: '07', title: 'A proteção começa antes', image: require('../../assets/marketing/verisure-social-07.jpg') },
+  { key: '08', title: 'Quando cada segundo conta', image: require('../../assets/marketing/verisure-social-08.jpg') },
+  { key: '09', title: 'Tecnologia e monitoramento', image: require('../../assets/marketing/verisure-social-09.jpg') },
+  { key: '04', title: 'Controle na sua rotina', image: require('../../assets/marketing/verisure-social-04.jpg') },
+  { key: '03', title: 'Cada ponto importa', image: require('../../assets/marketing/verisure-social-03.jpg') },
+];
+
 export default function DashboardScreen() {
   const { profile, studies, studiesStatus } = useApp();
   const [discountLimits, setDiscountLimits] = useState<{ equipment: number; monthly: number } | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<(typeof campaigns)[number] | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -115,7 +124,27 @@ export default function DashboardScreen() {
             </Card>
           </Pressable>)}
         </View>
+
+        <View style={{ marginTop: 24, marginBottom: 20 }}>
+          <Text style={{ color: COLORS.ink, fontSize: 18, fontWeight: '900', letterSpacing: -0.4 }}>Segurança em foco</Text>
+          <Text style={{ color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 4, marginBottom: 12 }}>Conheça soluções e dicas para proteger cada ambiente.</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 20 }}>
+            {campaigns.map((campaign) => <Pressable key={campaign.key} accessibilityRole="button" accessibilityLabel={`Ampliar imagem: ${campaign.title}`} onPress={() => setSelectedCampaign(campaign)} style={({ pressed }) => [{ width: 184, aspectRatio: 0.75, borderRadius: 20, overflow: 'hidden', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border }, pressed && { opacity: 0.86 }]}>
+              <Image source={campaign.image} accessible accessibilityLabel={campaign.title} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
+            </Pressable>)}
+          </ScrollView>
+        </View>
       </ScrollView>
+
+      <Modal visible={selectedCampaign !== null} transparent animationType="fade" onRequestClose={() => setSelectedCampaign(null)}>
+        <View style={{ flex: 1, backgroundColor: '#08111FEF', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Fechar imagem ampliada" onPress={() => setSelectedCampaign(null)} style={{ position: 'absolute', top: 50, right: 20, zIndex: 1, width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.surface, alignItems: 'center', justifyContent: 'center' }}>
+            <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} tintColor={COLORS.ink} size={20} />
+          </Pressable>
+          {selectedCampaign && <Image source={selectedCampaign.image} accessible accessibilityLabel={selectedCampaign.title} resizeMode="contain" style={{ width: '100%', height: '86%' }} />}
+          {selectedCampaign && <Text style={{ color: COLORS.surface, fontSize: 14, fontWeight: '800', marginTop: 8 }}>{selectedCampaign.title}</Text>}
+        </View>
+      </Modal>
     </Screen>
   );
 }
