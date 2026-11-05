@@ -1,16 +1,16 @@
 import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
-import { useApp } from '@/lib/app-context';
+import { COLORS, useApp } from '@/lib/app-context';
 
 export default function TabLayout() {
   const { unreadCount } = useApp();
   return (
     <Tabs screenOptions={{
       headerShown: false,
-      tabBarActiveTintColor: '#ED0038',
-      tabBarInactiveTintColor: '#858A93',
-      tabBarLabelStyle: { fontSize: 10, fontWeight: '700', marginTop: 2 },
-      tabBarStyle: { height: 70, paddingTop: 8, paddingBottom: 8, borderTopColor: '#E8EAEE', backgroundColor: '#FFFFFF', elevation: 0 },
+      tabBarActiveTintColor: COLORS.red,
+      tabBarInactiveTintColor: COLORS.muted,
+      tabBarLabelStyle: { fontSize: 10, fontWeight: '800', marginTop: 3 },
+      tabBarStyle: { height: 78, paddingTop: 9, paddingBottom: 9, borderTopWidth: 0, borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: COLORS.surface, elevation: 12, shadowColor: '#1A263A', shadowOpacity: 0.09, shadowRadius: 16, shadowOffset: { width: 0, height: -5 } },
     }}>
       <Tabs.Screen name="index" options={{ title: 'Painel', tabBarIcon: ({ color }) => <SymbolView name={{ ios: 'house.fill', android: 'home', web: 'home' }} tintColor={color} size={25} /> }} />
       <Tabs.Screen name="study" options={{ title: 'Novo estudo', tabBarIcon: ({ color }) => <SymbolView name={{ ios: 'plus.circle.fill', android: 'add_circle', web: 'add_circle' }} tintColor={color} size={25} /> }} />

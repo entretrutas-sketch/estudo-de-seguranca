@@ -3,8 +3,8 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 
 export const COLORS = {
-  red: '#E60032', redDark: '#B50028', redSoft: '#FFF0F3', ink: '#17191D', text: '#30343B',
-  muted: '#70747C', surface: '#FFFFFF', canvas: '#F5F6F8', border: '#E7E9ED', success: '#147A4B',
+  red: '#F10A35', redDark: '#C6002E', redSoft: '#FFE8ED', ink: '#111827', text: '#273143',
+  muted: '#697386', surface: '#FFFFFF', canvas: '#F4F5F9', border: '#E7E9F0', success: '#147A4B',
 } as const;
 
 export type KitName = 'KIT PROTECTION' | 'BT4' | 'BT6' | 'BT8';
