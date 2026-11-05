@@ -10,7 +10,7 @@ export function Screen({ children, ...props }: ViewProps) {
 }
 
 const destinations = [
-  ['Painel', '/'], ['Novo estudo', '/study'], ['Meus estudos', '/studies'], ['Catálogo', '/catalog'],
+  ['Painel', '/'], ['Novo estudo', '/study'], ['Meus estudos', '/studies'], ['Especialistas', '/specialists'], ['Catálogo', '/catalog'],
   ['Propostas', '/proposals'], ['Criar proposta comercial', '/create-proposal'], ['Chat da equipe', '/chat'], ['Condições comerciais', '/commercial-conditions'],
   ['Perfil do especialista', '/profile'], ['Configurações', '/settings'], ['Ajuda', '/help'],
 ] as const;
@@ -80,7 +80,7 @@ export function Progress({ step, total }: { step: number; total: number }) {
 
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.canvas },
-  screen: { flex: 1, backgroundColor: COLORS.canvas },
+  screen: { flex: 1, width: '100%', maxWidth: 1440, alignSelf: 'center', backgroundColor: COLORS.canvas },
   header: { paddingHorizontal: 20, paddingTop: 9, paddingBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   menuButton: { width: 46, height: 46, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#182236', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   headerDivider: { width: 1, height: 48, backgroundColor: '#A8AFBD', marginLeft: 10 },

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
 import { Avatar, Card, Header, ProductImage, Screen } from '@/components/mobile-ui';
 import { COLORS, useApp } from '@/lib/app-context';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { readSecureDraft } from '@/lib/secure-draft';
 
 const cameraImage = require('../../assets/equipment/01-camera-seguranca.webp');
 const quickLinks = [
@@ -22,20 +23,24 @@ const campaigns: { key: string; title: string; image: ImageSourcePropType }[] = 
 
 export default function DashboardScreen() {
   const { profile, studies, studiesStatus } = useApp();
-  const [discountLimits, setDiscountLimits] = useState<{ equipment: number; monthly: number } | null>(null);
+  const { user } = useAuth();
+  const [draft, setDraft] = useState<{ savedAt?: string; step?: number; client?: { name?: string } } | null>(null);
+  const [now, setNow] = useState(0);
   const [selectedCampaign, setSelectedCampaign] = useState<(typeof campaigns)[number] | null>(null);
 
   useEffect(() => {
-    if (!supabase) return;
-    void supabase.from('commercial_settings').select('equipment_discount_limit,monthly_discount_limit').eq('singleton', true).maybeSingle().then(({ data }) => {
-      if (data) setDiscountLimits({ equipment: Number(data.equipment_discount_limit), monthly: Number(data.monthly_discount_limit) });
-    });
-  }, []);
+    let active = true;
+    void readSecureDraft(user?.id ?? 'anonymous').then((raw) => { if (active && raw) setDraft(JSON.parse(raw) as typeof draft); }).catch(() => { if (active) setDraft(null); });
+    return () => { active = false; };
+  }, [user?.id]);
+  useEffect(() => { setNow(Date.now()); const interval = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(interval); }, []);
 
+  const proposals = studies.filter((study) => Boolean(study.proposalVersion || study.issuedAt)).length;
+  const evaluatedAccesses = studies.reduce((total, study) => total + study.accessCounts.doors + study.accessCounts.windows + study.accessCounts.externalAccess, 0);
   const metrics = [
-    { value: String(studies.length).padStart(2, '0'), label: studiesStatus === 'offline' ? 'estudos neste aparelho' : 'estudos salvos', ios: 'folder.fill', other: 'folder' },
-    { value: discountLimits ? `${discountLimits.equipment}%` : '—', label: 'limite em equipamentos', ios: 'gearshape.fill', other: 'settings' },
-    { value: discountLimits ? `${discountLimits.monthly}%` : '—', label: 'limite mensal', ios: 'calendar', other: 'calendar_month' },
+    { value: studiesStatus === 'loading' ? '—' : String(studies.length), label: 'estudos sincronizados · total', ios: 'folder.fill', other: 'folder' },
+    { value: studiesStatus === 'loading' ? '—' : String(proposals), label: 'propostas geradas · total', ios: 'doc.text.fill', other: 'description' },
+    { value: studiesStatus === 'loading' ? '—' : String(evaluatedAccesses), label: 'acessos avaliados · total', ios: 'door.left.hand.closed', other: 'door_front' },
   ] as const;
 
   return (
@@ -50,8 +55,8 @@ export default function DashboardScreen() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
         <View style={{ minHeight: 110, flexDirection: 'row', alignItems: 'center', marginTop: -4, marginBottom: 10, overflow: 'hidden' }}>
           <View style={{ flex: 1, paddingLeft: 1, zIndex: 1 }}>
-            <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: '500' }}>Bem-vindo(a),</Text>
-            <Text numberOfLines={1} style={{ color: COLORS.ink, fontSize: 30, fontWeight: '900', letterSpacing: -1, marginTop: 1 }}>{profile.name || 'Especialista'}</Text>
+            <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: '700' }}>Sua operação comercial</Text>
+            <Text numberOfLines={1} style={{ color: COLORS.ink, fontSize: 27, fontWeight: '900', letterSpacing: -1, marginTop: 1 }}>Visão geral</Text>
           </View>
           <View accessible={false} style={{ width: 160, height: 120, alignItems: 'center', justifyContent: 'center', marginRight: -18 }}>
             <View style={{ position: 'absolute', width: 150, height: 150, borderRadius: 100, backgroundColor: '#F8DDE3', right: -25, top: -18 }} />
@@ -73,10 +78,10 @@ export default function DashboardScreen() {
             <View style={{ position: 'absolute', right: -40, bottom: -55, width: 145, height: 300, backgroundColor: COLORS.red, transform: [{ rotate: '39deg' }] }} />
           </View>
           <View style={{ padding: 17, paddingTop: 15 }}>
-            <Text style={{ color: COLORS.ink, fontSize: 23, lineHeight: 27, fontWeight: '900', letterSpacing: -0.7 }}>Transforme a avaliação em uma <Text style={{ color: COLORS.red }}>proposta clara.</Text></Text>
-            <Text style={{ color: COLORS.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>Registre o imóvel, avalie os acessos e apresente uma solução personalizada.</Text>
+            <Text style={{ color: COLORS.ink, fontSize: 23, lineHeight: 27, fontWeight: '900', letterSpacing: -0.7 }}>Da avaliação à <Text style={{ color: COLORS.red }}>solução certa.</Text></Text>
+            <Text style={{ color: COLORS.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>Organize vulnerabilidades, equipamentos e proposta em um fluxo guiado.</Text>
             <Pressable accessibilityRole="button" onPress={() => router.push('/study')} style={({ pressed }) => [{ alignSelf: 'flex-start', minHeight: 48, marginTop: 13, borderRadius: 25, backgroundColor: COLORS.red, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: COLORS.redDark, shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 }, pressed && { opacity: 0.82, transform: [{ scale: 0.99 }] }]}>
-              <Text style={{ color: COLORS.surface, fontSize: 14, fontWeight: '900' }}>Começar novo estudo</Text>
+              <Text style={{ color: COLORS.surface, fontSize: 14, fontWeight: '900' }}>Novo estudo</Text>
               <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} tintColor={COLORS.surface} size={18} />
             </Pressable>
           </View>
@@ -89,7 +94,7 @@ export default function DashboardScreen() {
               <Text style={{ color: COLORS.ink, fontSize: 17, fontWeight: '900', letterSpacing: -0.4 }}>Resumo da atividade</Text>
             </View>
             <View style={{ minHeight: 34, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Text style={{ color: COLORS.text, fontSize: 10, fontWeight: '700' }}>Últimos 30 dias</Text>
+              <Text style={{ color: COLORS.text, fontSize: 10, fontWeight: '700' }}>Visão geral · total</Text>
               <SymbolView name={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }} tintColor={COLORS.muted} size={14} />
             </View>
           </View>
@@ -102,6 +107,13 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {draft && <Card style={{ marginTop: 18, borderLeftWidth: 4, borderLeftColor: COLORS.red }}>
+          <Text style={{ color: COLORS.redDark, fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>RASCUNHO LOCAL</Text>
+          <Text style={{ color: COLORS.ink, fontSize: 17, fontWeight: '900', marginTop: 6 }}>{draft.client?.name ? `Retomar estudo · ${draft.client.name}` : 'Retomar seu estudo'}</Text>
+          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>Etapa {draft.step ?? 1} de 5 · {draft.savedAt ? `salvo ${!now || Math.floor((now - new Date(draft.savedAt).getTime()) / 60000) < 1 ? 'agora' : `há ${Math.floor((now - new Date(draft.savedAt).getTime()) / 60000)} min`}` : 'salvamento local ativo'}</Text>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/study')} style={{ minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', marginTop: 8 }}><Text style={{ color: COLORS.red, fontWeight: '900' }}>Retomar estudo →</Text></Pressable>
+        </Card>}
+        {studiesStatus === 'offline' && <Card style={{ marginTop: 12, backgroundColor: '#FFF8E9', borderColor: '#E8D39A' }}><Text style={{ color: '#735100', fontWeight: '900' }}>Sincronização pendente</Text><Text style={{ color: COLORS.text, fontSize: 12, lineHeight: 18, marginTop: 4 }}>Os estudos do servidor não foram carregados. Mantenha o rascunho local e confira a conexão antes de emitir uma proposta.</Text></Card>}
         <View style={{ marginTop: 21, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <SymbolView name={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }} tintColor={COLORS.red} size={21} />
@@ -123,6 +135,12 @@ export default function DashboardScreen() {
               <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} tintColor={COLORS.ink} size={16} />
             </Card>
           </Pressable>)}
+        </View>
+
+        <View style={{ marginTop: 22 }}>
+          <Text style={{ color: COLORS.ink, fontSize: 18, fontWeight: '900' }}>Atividade recente</Text>
+          {studies.slice(0, 3).map((study) => <Pressable key={study.id} accessibilityRole="button" onPress={() => router.push('/studies')} style={{ minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border }}><View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: COLORS.redSoft, alignItems: 'center', justifyContent: 'center' }}><SymbolView name={{ ios: 'doc.text', android: 'description', web: 'description' }} tintColor={COLORS.red} size={18} /></View><View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: COLORS.ink, fontWeight: '800', fontSize: 13 }}>{study.client.name || 'Imóvel sem identificação'}</Text><Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 3 }}>{study.kit} · {study.synced ? 'Sincronizado' : 'Salvo neste aparelho'}</Text></View><Text style={{ color: COLORS.muted, fontSize: 10 }}>{new Date(study.createdAt).toLocaleDateString('pt-BR')}</Text></Pressable>)}
+          {studies.length === 0 && studiesStatus !== 'loading' && <Text style={{ color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 8 }}>{studiesStatus === 'offline' ? 'Sem conexão com o histórico. Seu rascunho local permanece protegido neste aparelho.' : 'Seus estudos sincronizados aparecerão aqui. Comece criando um estudo do imóvel.'}</Text>}
         </View>
 
         <View style={{ marginTop: 24, marginBottom: 20 }}>

@@ -4,8 +4,8 @@ import * as Location from 'expo-location';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card, Header, PrimaryButton, ProductImage, Progress, Screen, SecondaryButton, SectionLabel, styles } from '@/components/mobile-ui';
 import { COLORS, EQUIPMENT, getKit, money, type ClientDraft, type EvaluationDraft, type KitName, type SavedStudy, type SpecialistDraft, useApp } from '@/lib/app-context';
@@ -83,6 +83,13 @@ export default function StudyScreen() {
   const [draftRestored, setDraftRestored] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [draftStorageError, setDraftStorageError] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [now, setNow] = useState(0);
+  const [stepError, setStepError] = useState('');
+  const draftPayloadRef = useRef('');
+  const draftScopeRef = useRef(user?.id ?? 'anonymous');
+  const draftFinalizedRef = useRef(false);
+  useEffect(() => { draftScopeRef.current = user?.id ?? 'anonymous'; }, [user?.id]);
 
   useEffect(() => {
     setSpecialist((current) => ({ ...current, name: current.name || profile.name, email: current.email || profile.email, avatarUrl: profile.avatarUrl || current.avatarUrl }));
@@ -97,7 +104,7 @@ export default function StudyScreen() {
   useEffect(() => {
     void readSecureDraft(user?.id ?? 'anonymous').then((raw) => {
       if (!raw) return;
-      const draft = JSON.parse(raw) as { idempotencyKey?: string; client?: ClientDraft; specialist?: SpecialistDraft; evaluation?: EvaluationDraft; kitName?: KitName; step?: number; equipmentDiscount?: string; monthlyDiscount?: string };
+      const draft = JSON.parse(raw) as { idempotencyKey?: string; client?: ClientDraft; specialist?: SpecialistDraft; evaluation?: EvaluationDraft; kitName?: KitName; step?: number; equipmentDiscount?: string; monthlyDiscount?: string; savedAt?: string };
       if (draft.idempotencyKey) setIdempotencyKey(draft.idempotencyKey);
       if (draft.client) setClient({ ...blankClient, ...draft.client });
       if (draft.specialist) setSpecialist((current) => ({ ...current, ...draft.specialist }));
@@ -106,14 +113,27 @@ export default function StudyScreen() {
       if (draft.step) setStep(draft.step);
       if (draft.equipmentDiscount) setEquipmentDiscount(draft.equipmentDiscount);
       if (draft.monthlyDiscount) setMonthlyDiscount(draft.monthlyDiscount);
+      if (draft.savedAt) setDraftSavedAt(draft.savedAt);
       setDraftRestored(true);
     }).catch((error: unknown) => setDraftStorageError(error instanceof Error ? error.message : 'Não foi possível ler o rascunho seguro.')).finally(() => setDraftReady(true));
   }, [user?.id]);
+  useEffect(() => { setNow(Date.now()); const interval = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(interval); }, []);
   useEffect(() => {
     if (!draftReady || created) return;
-    const timeout = setTimeout(() => { void writeSecureDraft(user?.id ?? 'anonymous', JSON.stringify({ idempotencyKey, client, specialist, evaluation, kitName, step, equipmentDiscount, monthlyDiscount })).then((saved) => { if (!saved && Platform.OS === 'web') setDraftStorageError('Rascunho não persistido na web; finalize ou mantenha esta aba aberta.'); }).catch((error: unknown) => setDraftStorageError(error instanceof Error ? error.message : 'Não foi possível gravar o rascunho seguro.')); }, 350);
+    const payload = { idempotencyKey, client, specialist, evaluation, kitName, step, equipmentDiscount, monthlyDiscount, savedAt: new Date().toISOString() };
+    draftPayloadRef.current = JSON.stringify(payload);
+    const timeout = setTimeout(() => {
+      const savedAt = payload.savedAt;
+      void writeSecureDraft(user?.id ?? 'anonymous', draftPayloadRef.current)
+        .then(() => { setDraftSavedAt(savedAt); setDraftStorageError(''); })
+        .catch((error: unknown) => setDraftStorageError(error instanceof Error ? error.message : 'Não foi possível gravar o rascunho seguro.'));
+    }, 350);
     return () => clearTimeout(timeout);
   }, [user?.id, idempotencyKey, client, specialist, evaluation, kitName, step, equipmentDiscount, monthlyDiscount, draftReady, created]);
+  useFocusEffect(useCallback(() => () => {
+    if (draftFinalizedRef.current || !draftPayloadRef.current) return;
+    void writeSecureDraft(draftScopeRef.current, draftPayloadRef.current).catch(() => undefined);
+  }, []));
   useEffect(() => {
     let alive = true;
     if (!supabase) return;
@@ -145,8 +165,13 @@ export default function StudyScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 5, quality: 0.7 });
     if (!result.canceled) setEvaluation((value) => ({ ...value, photoUris: result.assets.slice(0, 5).map((asset) => asset.uri) }));
   };
-  const goNext = () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined); setStep((value) => Math.min(5, value + 1)); };
-  const goBack = () => setStep((value) => Math.max(1, value - 1));
+  const goNext = () => {
+    if (step === 1 && (!specialist.name.trim() || !/^[^@\s]+@verisure\.com\.br$/i.test(specialist.email.trim()))) { setStepError('Informe o nome do especialista e um e-mail corporativo @verisure.com.br.'); return; }
+    if (step === 2 && !client.name.trim()) { setStepError('Informe o nome do cliente para identificar o imóvel.'); return; }
+    if (step === 2 && !(client.locationName.trim() || (client.street.trim() && client.city.trim()))) { setStepError('Informe o nome do local ou o endereço com cidade.'); return; }
+    setStepError(''); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined); setStep((value) => Math.min(5, value + 1));
+  };
+  const goBack = () => { setStepError(''); setStep((value) => Math.max(1, value - 1)); };
 
   const save = async () => {
     if (!client.name.trim()) { Alert.alert('Dados incompletos', 'Informe o nome do cliente.'); setStep(2); return; }
@@ -158,6 +183,7 @@ export default function StudyScreen() {
     try {
       const saved = await addStudy({ idempotencyKey, client, kit: kit.name, accessCounts: evaluation.accessCounts, finalEquipment: 0, finalMonthly: 0, specialist, evaluation, equipmentDiscount: equipmentPct, monthlyDiscount: monthlyPct });
       savedStudy = saved;
+      draftFinalizedRef.current = true;
       setCreated(saved);
       await deleteSecureDraft(user?.id ?? 'anonymous');
       await prepareProposal(saved);
@@ -255,8 +281,8 @@ export default function StudyScreen() {
   ];
   return <Screen><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Header title="Novo estudo" right={<Text style={{ color: COLORS.red, fontWeight: '900' }}>{step}/5</Text>} />
-    {created ? <ProposalPreview study={created} ready={Boolean(proposalHtml)} loading={saving} error={proposalError} onRetry={() => void retryProposal()} onPdf={() => void printPdf()} onShare={() => void sharePdf()} onWhatsApp={() => void copyWhatsApp()} onEdit={editSavedStudy} onStudies={() => router.replace('/studies')}/> : <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 36 }} keyboardShouldPersistTaps="handled"><Progress step={step} total={5}/>
-    {draftRestored && <Text accessibilityRole="text" style={{ color: COLORS.muted, fontSize: 11, marginTop: 8 }}>Rascunho seguro restaurado automaticamente.</Text>}{!!draftStorageError && <Text accessibilityRole="alert" style={{ color: COLORS.redDark, fontSize: 11, marginTop: 8 }}>{draftStorageError}</Text>}
+    {created ? <ProposalPreview study={created} ready={Boolean(proposalHtml)} loading={saving} error={proposalError} onRetry={() => void retryProposal()} onPdf={() => void printPdf()} onShare={() => void sharePdf()} onWhatsApp={() => void copyWhatsApp()} onEdit={editSavedStudy} onStudies={() => router.replace('/studies')}/> : <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 36 }} keyboardShouldPersistTaps="handled"><Progress step={step} total={5}/>{!!stepError && <Text accessibilityRole="alert" style={{ color: COLORS.redDark, fontSize: 12, lineHeight: 18, marginTop: 8 }}>{stepError}</Text>}
+    {draftRestored && <Text accessibilityRole="text" style={{ color: COLORS.muted, fontSize: 11, marginTop: 8 }}>Rascunho retomado · etapa {step} de 5.</Text>}{draftSavedAt && <Text accessibilityLiveRegion="polite" style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>{draftStorageError ? 'Sincronização pendente · rascunho seguro neste aparelho' : `Salvo ${!now || Math.max(0, Math.floor((now - new Date(draftSavedAt).getTime()) / 60000)) < 1 ? 'agora' : `há ${Math.floor((now - new Date(draftSavedAt).getTime()) / 60000)} min`}`}</Text>}{!!draftStorageError && <Text accessibilityRole="alert" style={{ color: COLORS.redDark, fontSize: 11, marginTop: 8 }}>{draftStorageError}</Text>}
     {step === 1 && <View style={{ marginTop: 20 }}><SectionLabel>Etapa 1 · Especialista</SectionLabel><Text style={titleStyle}>Responsável pelo estudo</Text><Card style={{ marginTop: 14 }}><Field label="Nome" value={specialist.name} onChangeText={(value) => setSpecialist((current) => ({ ...current, name: value }))} placeholder="Nome do especialista"/><Field label="E-mail corporativo" value={specialist.email} onChangeText={(value) => setSpecialist((current) => ({ ...current, email: value }))} placeholder="nome@empresa.com" keyboardType="email-address"/><Field label="Telefone para contato" value={specialist.phone} onChangeText={(value) => setSpecialist((current) => ({ ...current, phone: value }))} placeholder="(00) 00000-0000" keyboardType="phone-pad"/><Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}>Foto de perfil oficial: {specialist.avatarUrl ? 'disponível pela conta' : 'não fornecida pela conta'}</Text></Card></View>}
     {step === 2 && <View style={{ marginTop: 20 }}><SectionLabel>Etapa 2 · Cliente e local</SectionLabel><Text style={titleStyle}>Quem vamos proteger?</Text><Card style={{ marginTop: 14 }}><Field label="Nome do cliente *" value={client.name} onChangeText={(value) => updateClient('name', value)} placeholder="Nome completo"/><Field label="Telefone" value={client.phone} onChangeText={(value) => updateClient('phone', value)} placeholder="(00) 00000-0000" keyboardType="phone-pad"/><Field label="Tipo de imóvel (opcional)" value={client.propertyType} onChangeText={(value) => updateClient('propertyType', value)} placeholder="Residencial, comercial, condomínio"/><Field label="Nome do local" value={client.locationName} onChangeText={(value) => updateClient('locationName', value)} placeholder="Unidade / residência"/><Field label="Rua" value={client.street} onChangeText={(value) => updateClient('street', value)} placeholder="Rua ou avenida"/><View style={{ flexDirection: 'row', gap: 10 }}><View style={{ flex: 1 }}><Field label="Número" value={client.addressNumber} onChangeText={(value) => updateClient('addressNumber', value)} placeholder="Nº"/></View><View style={{ flex: 1 }}><Field label="Complemento" value={client.complement} onChangeText={(value) => updateClient('complement', value)} placeholder="Casa, bloco"/></View></View><Field label="Bairro" value={client.neighborhood} onChangeText={(value) => updateClient('neighborhood', value)} placeholder="Bairro"/><View style={{ flexDirection: 'row', gap: 10 }}><View style={{ flex: 1 }}><Field label="Cidade" value={client.city} onChangeText={(value) => updateClient('city', value)} placeholder="Cidade"/></View><View style={{ width: 76 }}><Field label="UF" value={client.state} onChangeText={(value) => updateClient('state', value)} placeholder="UF"/></View></View><Field label="CEP (opcional)" value={client.postalCode} onChangeText={(value) => updateClient('postalCode', value)} placeholder="00000-000" keyboardType="phone-pad"/><Pressable accessibilityRole="button" onPress={() => void locateAddress()} style={{ minHeight: 48, borderWidth: 1, borderColor: COLORS.red, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 14 }}>{locating ? <ActivityIndicator color={COLORS.red}/> : <Text style={{ color: COLORS.red, fontWeight: '900' }}>Usar minha localização</Text>}</Pressable></Card></View>}
     {step === 3 && <View style={{ marginTop: 20 }}><SectionLabel>Etapa 3 · Avaliação</SectionLabel><Text style={titleStyle}>Avalie os acessos do imóvel</Text><Text style={{ color: COLORS.muted, marginTop: 6 }}>A recomendação não substitui vistoria técnica.</Text><Card style={{ marginTop: 14 }}>{accessLabels.map(([key, label]) => <View key={key} style={rowStyle}><Text style={{ flex: 1, color: COLORS.ink, fontWeight: '800' }}>{label}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Diminuir ${label}`} onPress={() => setEvaluation((value) => ({ ...value, accessCounts: { ...value.accessCounts, [key]: Math.max(0, value.accessCounts[key] - 1) } }))} style={counterStyle}><Text>−</Text></Pressable><Text style={{ width: 34, textAlign: 'center', fontWeight: '900' }}>{evaluation.accessCounts[key]}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Aumentar ${label}`} onPress={() => setEvaluation((value) => ({ ...value, accessCounts: { ...value.accessCounts, [key]: value.accessCounts[key] + 1 } }))} style={[counterStyle, { backgroundColor: COLORS.red }]}><Text style={{ color: 'white' }}>+</Text></Pressable></View>)}<Field label="Garagem / acesso veicular" value={evaluation.garage} onChangeText={(value) => setEvaluation((current) => ({ ...current, garage: value }))} placeholder="Descreva o acesso"/><Field label="Áreas internas relevantes" value={evaluation.interiorAreas} onChangeText={(value) => setEvaluation((current) => ({ ...current, interiorAreas: value }))} placeholder="Sala, hall, corredores…"/><Field label="Observações do especialista" value={evaluation.notes} onChangeText={(value) => setEvaluation((current) => ({ ...current, notes: value }))} placeholder="Pontos de atenção, sem prometer cobertura" multiline/><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: evaluation.photoConsent }} onPress={() => setEvaluation((value) => ({ ...value, photoConsent: !value.photoConsent }))} style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14 }}><Text style={{ color: COLORS.red, fontSize: 18 }}>{evaluation.photoConsent ? '☑' : '□'}</Text><Text style={{ flex: 1, color: COLORS.text, fontSize: 12 }}>Tenho consentimento do cliente para selecionar fotos do imóvel.</Text></Pressable><SecondaryButton onPress={() => void pickPhotos()} style={{ marginTop: 12 }}>Selecionar até 5 fotos ({evaluation.photoUris.length})</SecondaryButton><Text style={{ fontSize: 11, color: COLORS.muted, marginTop: 6 }}>Fotos ficam no dispositivo até haver configuração de storage seguro no Supabase.</Text></Card></View>}

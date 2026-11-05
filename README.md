@@ -8,6 +8,16 @@ O workflow `.github/workflows/deploy-pages.yml` publica o site em cada push para
 
 GitHub Pages publica somente o frontend. As migrations e a Edge Function desta aplicação também precisam ser aplicadas no projeto Supabase.
 
+## Colaboração e segurança
+
+O diretório de especialistas usa `specialist_directory`, separado do cadastro de autenticação, e as regras RLS mostram somente perfis aprovados e listados. Conversas individuais, recibos de leitura e anexos privados são habilitados pelas migrations `202611050001_specialist_directory.sql` e `202611050002_secure_collaboration.sql`. A migration `202611050003_employee_login_rate_limit.sql` adiciona limite temporário de tentativas ao login por matrícula. Grupos privados e criação validada no servidor são habilitados por `202611050004_team_groups.sql`.
+
+As quatro migrations acima foram aplicadas ao projeto Supabase `amzgyfjrmzwkfwlldcwa` durante esta atualização. Para outros ambientes, aplique-as depois das migrations de autorização já existentes. O bucket `team-chat-attachments` é privado e aceita somente JPEG, PNG, WebP ou PDF até 10 MB. O diretório nunca consulta e-mail, telefone ou matrícula de outros especialistas.
+
+Depois de alterar `supabase/functions/employee-login/index.ts`, publique a função separadamente com `supabase functions deploy employee-login`. O código usa o segredo de serviço apenas no servidor e chama a RPC `consume_employee_login_attempt`; a versão publicada precisa ser atualizada para que o limite seja aplicado aos logins.
+
+O chat oferece o canal geral, conversas individuais e grupos privados persistidos. Notificações push, denúncia/bloqueio e o ciclo formal de aprovação de propostas ainda dependem de implementação adicional e não devem ser tratados como disponíveis.
+
 ## Cadastro e autorização
 
 O especialista solicita acesso com nome completo, matrícula, e-mail `@verisure.com.br` e senha. A conta entra como pendente e não pode usar os módulos até a gestão aprovar. A entrada é feita com matrícula e senha; a função `employee-login` procura o e-mail corporativo no servidor e entrega tokens somente após verificar a aprovação. A senha nunca é salva no perfil.

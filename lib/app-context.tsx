@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 
 export const COLORS = {
-  red: '#F10A35', redDark: '#C6002E', redSoft: '#FFE8ED', ink: '#111827', text: '#273143',
+  red: '#D8002F', redDark: '#C6002E', redSoft: '#FFE8ED', ink: '#111827', text: '#273143',
   muted: '#697386', surface: '#FFFFFF', canvas: '#F4F5F9', border: '#E7E9F0', success: '#147A4B',
 } as const;
 
@@ -66,6 +66,8 @@ type AppContextValue = {
   chatConnected: boolean;
   chatAuthorized: boolean;
   unreadCount: number;
+  directUnreadCount: number;
+  refreshDirectUnreadCount: () => Promise<void>;
   markChatRead: () => Promise<void>;
   sendChat: (body: string) => Promise<void>;
 };
@@ -90,8 +92,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [chatConnected, setChatConnected] = useState(false);
   const [chatAuthorized, setChatAuthorized] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [directUnreadCount, setDirectUnreadCount] = useState(0);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState('');
   const readAt = useRef(new Date(0).toISOString());
+
+  const refreshDirectUnreadCount = useCallback(async () => {
+    if (!user || !supabase) { setDirectUnreadCount(0); return; }
+    const { data, error } = await supabase.rpc('list_direct_conversations');
+    if (error || !data) return;
+    setDirectUnreadCount((data as { unread_count?: number | string }[]).reduce((sum, item) => sum + Number(item.unread_count ?? 0), 0));
+  }, [user?.id]);
 
   useEffect(() => {
     const client = supabase;
@@ -137,6 +147,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setChatConnected(false);
       setChatAuthorized(false);
       setUnreadCount(0);
+      setDirectUnreadCount(0);
       return;
     }
 
@@ -144,9 +155,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setStudiesStatus('loading');
     if (!supabase) { setStudiesStatus('offline'); return () => { active = false; }; }
 
+    void (async () => { try { await supabase!.from('specialist_directory').update({ last_seen_at: new Date().toISOString() }).eq('user_id', user.id); } catch { /* Directory metadata is optional for core app access. */ } })();
+
     void supabase.from('team_chat_members').select('enabled').eq('user_id', user.id).maybeSingle().then(({ data }) => {
       if (active) setChatAuthorized(data?.enabled === true);
     });
+    void refreshDirectUnreadCount();
 
     void (async () => {
       const { data } = await supabase.from('team_chat_reads').select('last_read_at').eq('user_id', user.id).maybeSingle();
@@ -160,29 +174,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     void Promise.all([
       supabase.from('studies').select('id, data, created_at').order('created_at', { ascending: false }),
-      supabase.from('team_chat_messages').select('id, user_id, author_name, author_avatar_url, body, created_at').order('created_at', { ascending: true }).limit(200),
-    ]).then(async ([studyResult, chatResult]) => {
+      supabase.from('proposals').select('study_id, data, created_at').order('created_at', { ascending: false }),
+      supabase.from('team_chat_messages').select('id, user_id, author_name, author_avatar_url, body, created_at').is('conversation_id', null).order('created_at', { ascending: false }).limit(50),
+    ]).then(async ([studyResult, proposalResult, chatResult]) => {
       if (!active) return;
       setStudiesStatus(studyResult.error ? 'offline' : 'ready');
       if (!studyResult.error && studyResult.data) {
-        const remoteStudies = studyResult.data.map((row) => ({ ...(row.data as Omit<SavedStudy, 'id' | 'createdAt'>), id: row.id, createdAt: row.created_at, synced: true }));
+        const proposalByStudy = new Map((proposalResult.data ?? []).map((proposal) => [proposal.study_id, { data: proposal.data as Record<string, unknown>, created_at: proposal.created_at }]));
+        const remoteStudies = studyResult.data.map((row) => {
+          const proposal = proposalByStudy.get(row.id);
+          return { ...(row.data as Omit<SavedStudy, 'id' | 'createdAt'>), ...(proposal ? { issuedAt: String(proposal.data.issuedAt ?? proposal.created_at), proposalVersion: String(proposal.data.proposalVersion ?? '') } : {}), id: row.id, createdAt: row.created_at, synced: true };
+        });
         setStudies(remoteStudies);
       }
       if (!chatResult.error && chatResult.data) {
-        const remoteMessages = chatResult.data.map((row) => formatMessage(row, user.id));
+        const chronologicalRows = [...chatResult.data].reverse();
+        const remoteMessages = chronologicalRows.map((row) => formatMessage(row, user.id));
         const messages = remoteMessages;
         setChatMessages(messages);
-        setUnreadCount(remoteMessages.filter((message, index) => !message.mine && new Date(chatResult.data[index].created_at) > new Date(readAt.current)).length);
+        setUnreadCount(remoteMessages.filter((message, index) => !message.mine && new Date(chronologicalRows[index].created_at) > new Date(readAt.current)).length);
       }
-    }).catch((error: unknown) => { setStudiesStatus('offline'); console.warn('Falha ao sincronizar os dados:', error); });
+    }).catch(() => { setStudiesStatus('offline'); });
 
     const channel = supabase.channel(`team-chat-${user.id}`).on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'team_chat_messages' },
         (payload) => {
         if (!active) return;
-        const message = formatMessage(payload.new as { id: string; user_id: string; author_name: string; author_avatar_url?: string; body: string; created_at: string }, user.id);
-        if (!message.mine && new Date(payload.new.created_at) > new Date(readAt.current)) setUnreadCount((count) => count + 1);
+        const row = payload.new as { id: string; conversation_id?: string | null; created_at: string; user_id: string; author_name: string; author_avatar_url?: string; body: string };
+        if (row.conversation_id) { void refreshDirectUnreadCount(); return; }
+        const message = formatMessage(row, user.id);
+        if (!message.mine && new Date(row.created_at) > new Date(readAt.current)) setUnreadCount((count) => count + 1);
         setChatMessages((current) => {
           if (current.some((item) => item.id === message.id)) return current;
           const next = [...current, message];
@@ -196,7 +218,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setChatConnected(false);
       void supabase?.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, refreshDirectUnreadCount]);
 
   const addStudy = useCallback(async (study: Omit<SavedStudy, 'id' | 'createdAt'>) => {
     if (!user) throw new Error('Autentique-se para salvar estudos no backend e gerar propostas.');
@@ -292,9 +314,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     chatConnected,
     chatAuthorized,
     unreadCount,
+    directUnreadCount,
+    refreshDirectUnreadCount,
     markChatRead,
     sendChat,
-  }), [studies, studiesStatus, chatMessages, chatConnected, chatAuthorized, unreadCount, user, profileAvatarUrl, addStudy, sendChat, markChatRead]);
+  }), [studies, studiesStatus, chatMessages, chatConnected, chatAuthorized, unreadCount, directUnreadCount, refreshDirectUnreadCount, user, profileAvatarUrl, addStudy, sendChat, markChatRead]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
